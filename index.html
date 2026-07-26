@@ -224,7 +224,7 @@ OneSignalDeferred.push(async function(OneSignal){
             serviceWorkerParam: { scope: swFolder },
             serviceWorkerPath: swFolder + 'OneSignalSDKWorker.js'
         });
-    }catch(e){ console.log('OneSignal init failed:', e); }
+    }catch(e){ console.log('OneSignal init failed:', e); alert('DEBUG: OneSignal init failed: ' + e.message); }
 });
 function registerPushSubscription(){
     if(!currentUser) return;
@@ -249,8 +249,10 @@ function registerPushSubscription(){
 }
 function enablePushNotifications(){
     // Called directly from a button click (real user gesture) so mobile browsers don't silently block the prompt.
+    alert('DEBUG: Button click detected. Requesting permission...');
     window.OneSignalDeferred = window.OneSignalDeferred || [];
     OneSignalDeferred.push(async function(OneSignal){
+        alert('DEBUG: OneSignal SDK ready, calling requestPermission now.');
         try{
             await OneSignal.Notifications.requestPermission();
             const btn = document.getElementById('enable-notif-btn');
@@ -261,7 +263,7 @@ function enablePushNotifications(){
             } else {
                 alert('Notification permission tharaan pattiyilla. Browser settings-il ninnu manually allow cheyyendi varum.');
             }
-        }catch(e){ console.log('Permission request failed:', e); }
+        }catch(e){ console.log('Permission request failed:', e); alert('DEBUG: requestPermission error: ' + e.message); }
     });
 }
 function sendOneSignalPush(subscriptionIds, title, message){
