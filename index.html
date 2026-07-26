@@ -270,7 +270,7 @@ function sendPushToUser(username, title, message){
         if(data) sendOneSignalPush(Object.keys(data), title, message);
     }).catch(err => console.log('Fetching user for push failed:', err));
 }
-let dbCache = { stocks:[], sales:[], services:[], purchases:[], partners:[], payrec:[], daybook:[] }; let deferredInstallPrompt = null; window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstallPrompt = e; const btn = document.getElementById('install-app-btn'); if(btn) btn.style.display = 'inline-flex'; }); function installApp(){ if(!deferredInstallPrompt){ alert('App already installed alle, browser menu-il ninnum "Add to Home screen" / "Install" option nokkuka.'); return; } deferredInstallPrompt.prompt(); deferredInstallPrompt.userChoice.finally(() => { deferredInstallPrompt = null; const btn = document.getElementById('install-app-btn'); if(btn) btn.style.display = 'none'; }); } window.addEventListener('appinstalled', () => { const btn = document.getElementById('install-app-btn'); if(btn) btn.style.display = 'none'; }); if('serviceWorker' in navigator){ window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed:', err)); }); } window.addEventListener('load', () => { startLiveClock(); setTimeout(() => { checkLoginSession(); }, 900); }); let pendingAppUpdate = null;
+let dbCache = { stocks:[], sales:[], services:[], purchases:[], partners:[], payrec:[], daybook:[] }; let deferredInstallPrompt = null; window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstallPrompt = e; const btn = document.getElementById('install-app-btn'); if(btn) btn.style.display = 'inline-flex'; }); function installApp(){ if(!deferredInstallPrompt){ alert('App already installed alle, browser menu-il ninnum "Add to Home screen" / "Install" option nokkuka.'); return; } deferredInstallPrompt.prompt(); deferredInstallPrompt.userChoice.finally(() => { deferredInstallPrompt = null; const btn = document.getElementById('install-app-btn'); if(btn) btn.style.display = 'none'; }); } window.addEventListener('appinstalled', () => { const btn = document.getElementById('install-app-btn'); if(btn) btn.style.display = 'none'; }); if('serviceWorker' in navigator){ window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed:', err)); }); } window.addEventListener('load', () => { startLiveClock(); setTimeout(() => { if(appIsUpdating) return; checkLoginSession(); }, 900); }); let pendingAppUpdate = null; let appIsUpdating = false;
 function dismissLoadingScreen(){ const ls = document.getElementById('loading-screen'); if(!ls || ls.style.display === 'none') return; ls.style.opacity = '0'; setTimeout(() => { ls.style.display = 'none'; }, 500); }
 function showMaintenanceScreen(message){
     dismissLoadingScreen();
@@ -370,6 +370,7 @@ function markSupportSeen(){
     updateBellBadge();
 }
 function applyAppUpdate(data){
+    appIsUpdating = true;
     try{
         const apps = (typeof firebase !== 'undefined' && firebase.apps) ? firebase.apps.slice() : [];
         Promise.all(apps.map(app => app.delete().catch(()=>{}))).finally(() => {
