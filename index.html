@@ -217,7 +217,13 @@ const ONESIGNAL_REST_KEY = 'os_v2_app_a63ilafxfjhk3bzhakjv4jwkqogpifepsmiulff6l4
 window.OneSignalDeferred = window.OneSignalDeferred || [];
 OneSignalDeferred.push(async function(OneSignal){
     try{
-        await OneSignal.init({ appId: ONESIGNAL_APP_ID, allowLocalhostAsSecureOrigin: true });
+        const swFolder = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+        await OneSignal.init({
+            appId: ONESIGNAL_APP_ID,
+            allowLocalhostAsSecureOrigin: true,
+            serviceWorkerParam: { scope: swFolder },
+            serviceWorkerPath: swFolder + 'OneSignalSDKWorker.js'
+        });
     }catch(e){ console.log('OneSignal init failed:', e); }
 });
 function registerPushSubscription(){
