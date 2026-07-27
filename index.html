@@ -213,7 +213,7 @@
 <script> function hashPasscode(str){ let hash = 5381; for(let i=0;i<str.length;i++){ hash = ((hash*33) ^ str.charCodeAt(i)) >>> 0; } return hash.toString(16); } const PASSCODE_HASH = '7c514d87'; let passcodeCallback = null; let editingId = null; let isRegisterMode = false; let opWelcomeTypeTimer = null; let currentUser = null; let currentCompany = 'TECH SOLUTION'; let currentProfile = {}; let notifHasUpdate = false; let notifHasSupportReply = false; const firebaseConfig = { apiKey: "AIzaSyA39kIy9nU2JX45gjmhcoG1hWxaWipyQvo", authDomain: "as-laptop.firebaseapp.com", databaseURL: "https://as-laptop-default-rtdb.firebaseio.com", projectId: "as-laptop", storageBucket: "as-laptop.firebasestorage.app", messagingSenderId: "563705968757", appId: "1:563705968757:web:4c391d3e76eab79d9a603c", measurementId: "G-ZX2W4CCN6R" }; firebase.initializeApp(firebaseConfig); const fbdb = firebase.database();
 
 /* ---------- PUSH NOTIFICATIONS (FCM) ---------- */
-const FCM_VAPID_KEY = 'BNUvzxdebCuaIYVqdyHp_zZugygH7-XMd4ic2G9shONQa7J6vDvUm5gtQQ7CKrPeWUpD2UIaTC2rJEuL_lmc2gs';
+const FCM_VAPID_KEY = 'BMLEPWqyGXeovqLt7Idgx1RcpXM3W-5JoNNAik8aA3pjNbI_8XKNVtPzgxO1V6F4e36TwlBSdbTAQGcBDS6B1Ho';
 const PUSH_SENDER_ENDPOINT = 'https://as-soft-fcm-sender.vercel.app/api/send-notification';
 const PUSH_SENDER_API_KEY = 'f24fdb40d1560b2399d85c37ecd9f442';
 
