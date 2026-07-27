@@ -20,8 +20,8 @@ messaging.onBackgroundMessage((payload) => {
   const body = (payload.notification && payload.notification.body) || '';
   const options = {
     body: body,
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
+    icon: 'https://assoft628-eng.github.io/AS-SOFT-Software-/icons/icon-192.png',
+    badge: 'https://assoft628-eng.github.io/AS-SOFT-Software-/icons/icon-192.png',
     data: { url: (payload.fcmOptions && payload.fcmOptions.link) || '/' }
   };
   self.registration.showNotification(title, options);
