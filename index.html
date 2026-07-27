@@ -257,12 +257,44 @@ async function setupPushNotifications(username){
 }
 
 function sendPushNotification(payload){
+    if(!navigator.onLine){
+        queuePendingPush(payload);
+        return;
+    }
     fetch(PUSH_SENDER_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': PUSH_SENDER_API_KEY },
         body: JSON.stringify(payload)
-    }).catch(err => console.log('Push send failed:', err.message));
+    }).catch(err => { console.log('Push send failed, queued for retry:', err.message); queuePendingPush(payload); });
 }
+
+/* Queue push payloads that couldn't be sent because of no internet, so they
+   go out automatically the moment the connection comes back. */
+function queuePendingPush(payload){
+    try{
+        const key = 'as_pending_push_queue';
+        const queue = JSON.parse(localStorage.getItem(key) || '[]');
+        queue.push(payload);
+        localStorage.setItem(key, JSON.stringify(queue));
+    }catch(e){ console.log('Queue push failed:', e.message); }
+}
+
+function flushPendingPushQueue(){
+    try{
+        const key = 'as_pending_push_queue';
+        const queue = JSON.parse(localStorage.getItem(key) || '[]');
+        if(!queue.length) return;
+        localStorage.setItem(key, '[]');
+        queue.forEach(payload => {
+            fetch(PUSH_SENDER_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-api-key': PUSH_SENDER_API_KEY },
+                body: JSON.stringify(payload)
+            }).catch(err => { console.log('Retry push send failed, re-queued:', err.message); queuePendingPush(payload); });
+        });
+    }catch(e){ console.log('Flush push queue failed:', e.message); }
+}
+window.addEventListener('online', flushPendingPushQueue);
 
 function notifyTransaction(title, body){
     sendPushNotification({ username: currentUser, title: title, body: body, url: '/' });
@@ -273,9 +305,27 @@ function notifyTransaction(title, body){
 
 function loadUserNotifications(user){
     try{
+        const seenKey = 'as_notif_seen_' + user;
+        let seenKeys = new Set();
+        try{ seenKeys = new Set(JSON.parse(localStorage.getItem(seenKey) || '[]')); }catch(e){}
         fbdb.ref('user_notifications/' + user).limitToLast(20).on('value', snap => {
             const val = snap.val() || {};
-            notifItems = Object.keys(val).map(k => Object.assign({ _key: k }, val[k])).sort((a,b) => (b.ts||0) - (a.ts||0));
+            const newList = Object.keys(val).map(k => Object.assign({ _key: k }, val[k])).sort((a,b) => (b.ts||0) - (a.ts||0));
+            // Anything not yet seen on this device - pop it as a real notification.
+            // This fires every time Firebase syncs, which happens automatically the
+            // moment internet comes back on, so nothing missed while offline is lost -
+            // whether the app was open in the foreground or reconnecting after a gap.
+            const unseen = newList.filter(item => !seenKeys.has(item._key)).sort((a,b) => (a.ts||0) - (b.ts||0));
+            unseen.forEach(item => {
+                seenKeys.add(item._key);
+                if('Notification' in window && Notification.permission === 'granted'){
+                    try{ new Notification(item.title || 'AS Soft', { body: item.body || '', icon: 'icons/icon-192.png' }); }catch(e){}
+                }
+            });
+            if(unseen.length){
+                try{ localStorage.setItem(seenKey, JSON.stringify(Array.from(seenKeys).slice(-100))); }catch(e){}
+            }
+            notifItems = newList;
             updateBellBadge();
         });
     }catch(e){ console.log('Load notifications failed:', e.message); }
@@ -424,6 +474,7 @@ window.addEventListener('load', () => { checkForAppUpdate(); }); function startL
     }catch(e){ /* offline or timed out - fail open, continue loading normally */ }
     setupPushNotifications(user);
     loadUserNotifications(user);
+    if(navigator.onLine) flushPendingPushQueue();
     const emptyData = { stocks:[], sales:[], services:[], purchases:[], partners:[], payrec:[], daybook:[] };
     let localProfile = null, localData = null;
     try{
