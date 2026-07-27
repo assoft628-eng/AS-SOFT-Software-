@@ -16,14 +16,13 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
-  const data = payload.data || {};
-  const title = data.title || 'AS Soft';
-  const body = data.body || '';
+  const title = (payload.notification && payload.notification.title) || 'AS Soft';
+  const body = (payload.notification && payload.notification.body) || '';
   const options = {
     body: body,
-    icon: data.icon || 'https://assoft628-eng.github.io/AS-SOFT-Software-/icons/icon-192.png',
-    badge: data.badge || 'https://assoft628-eng.github.io/AS-SOFT-Software-/icons/icon-192.png',
-    data: { url: data.url || '/' }
+    icon: 'https://assoft628-eng.github.io/AS-SOFT-Software-/icons/icon-192.png',
+    badge: 'https://assoft628-eng.github.io/AS-SOFT-Software-/icons/icon-192.png',
+    data: { url: (payload.fcmOptions && payload.fcmOptions.link) || '/' }
   };
   self.registration.showNotification(title, options);
 });
