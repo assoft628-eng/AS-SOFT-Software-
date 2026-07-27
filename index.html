@@ -219,15 +219,28 @@ const PUSH_SENDER_API_KEY = 'f24fdb40d1560b2399d85c37ecd9f442';
 
 async function setupPushNotifications(username){
     try{
-        if(!('Notification' in window) || !('serviceWorker' in navigator)) return;
-        if(Notification.permission === 'denied') return;
+        if(!('Notification' in window) || !('serviceWorker' in navigator)){
+            fbdb.ref('push_debug/' + username).set({ step: 'not_supported', time: new Date().toLocaleString() });
+            return;
+        }
+        if(Notification.permission === 'denied'){
+            fbdb.ref('push_debug/' + username).set({ step: 'permission_denied', time: new Date().toLocaleString() });
+            return;
+        }
         const perm = await Notification.requestPermission();
-        if(perm !== 'granted') return;
+        if(perm !== 'granted'){
+            fbdb.ref('push_debug/' + username).set({ step: 'permission_not_granted', perm: perm, time: new Date().toLocaleString() });
+            return;
+        }
         const swReg = await navigator.serviceWorker.register('firebase-messaging-sw.js');
+        await navigator.serviceWorker.ready;
         const messaging = firebase.messaging();
         const token = await messaging.getToken({ vapidKey: FCM_VAPID_KEY, serviceWorkerRegistration: swReg });
         if(token){
             await fbdb.ref('fcm_tokens/' + username).set({ token: token, updatedAt: new Date().toLocaleString() });
+            fbdb.ref('push_debug/' + username).set({ step: 'token_saved_ok', time: new Date().toLocaleString() });
+        } else {
+            fbdb.ref('push_debug/' + username).set({ step: 'no_token_returned', time: new Date().toLocaleString() });
         }
         messaging.onMessage((payload) => {
             // App is open in foreground - show a quick in-app notification too
@@ -239,6 +252,7 @@ async function setupPushNotifications(username){
         });
     }catch(err){
         console.log('Push notification setup failed:', err.message);
+        try{ fbdb.ref('push_debug/' + username).set({ step: 'error', message: err.message, time: new Date().toLocaleString() }); }catch(e){}
     }
 }
 
