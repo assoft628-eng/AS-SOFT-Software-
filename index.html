@@ -217,14 +217,15 @@ const ONESIGNAL_REST_KEY = 'os_v2_app_a63ilafxfjhk3bzhakjv4jwkqogpifepsmiulff6l4
 window.OneSignalDeferred = window.OneSignalDeferred || [];
 OneSignalDeferred.push(async function(OneSignal){
     try{
-        const swFolder = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+        const appFolder = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+        const oneSignalFolder = appFolder + 'onesignal/';
         await OneSignal.init({
             appId: ONESIGNAL_APP_ID,
             allowLocalhostAsSecureOrigin: true,
-            serviceWorkerParam: { scope: swFolder },
-            serviceWorkerPath: swFolder + 'OneSignalSDKWorker.js'
+            serviceWorkerParam: { scope: oneSignalFolder },
+            serviceWorkerPath: oneSignalFolder + 'OneSignalSDKWorker.js'
         });
-    }catch(e){ console.log('OneSignal init failed:', e); alert('DEBUG: OneSignal init failed: ' + e.message); }
+    }catch(e){ console.log('OneSignal init failed:', e); }
 });
 function registerPushSubscription(){
     if(!currentUser) return;
@@ -249,10 +250,8 @@ function registerPushSubscription(){
 }
 function enablePushNotifications(){
     // Called directly from a button click (real user gesture) so mobile browsers don't silently block the prompt.
-    alert('DEBUG: Button click detected. Requesting permission...');
     window.OneSignalDeferred = window.OneSignalDeferred || [];
     OneSignalDeferred.push(async function(OneSignal){
-        alert('DEBUG: OneSignal SDK ready, calling requestPermission now.');
         try{
             await OneSignal.Notifications.requestPermission();
             const btn = document.getElementById('enable-notif-btn');
@@ -263,7 +262,7 @@ function enablePushNotifications(){
             } else {
                 alert('Notification permission tharaan pattiyilla. Browser settings-il ninnu manually allow cheyyendi varum.');
             }
-        }catch(e){ console.log('Permission request failed:', e); alert('DEBUG: requestPermission error: ' + e.message); }
+        }catch(e){ console.log('Permission request failed:', e); }
     });
 }
 function sendOneSignalPush(subscriptionIds, title, message){
