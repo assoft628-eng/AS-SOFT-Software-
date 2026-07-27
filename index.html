@@ -244,11 +244,10 @@ async function setupPushNotifications(username){
         }
         messaging.onMessage((payload) => {
             // App is open in foreground - show a quick in-app notification too
-            const data = payload.data || {};
-            const title = data.title || 'AS Soft';
-            const body = data.body || '';
+            const title = (payload.notification && payload.notification.title) || 'AS Soft';
+            const body = (payload.notification && payload.notification.body) || '';
             if(Notification.permission === 'granted'){
-                new Notification(title, { body: body, icon: data.icon || 'icons/icon-192.png' });
+                new Notification(title, { body: body, icon: 'icons/icon-192.png' });
             }
         });
     }catch(err){
