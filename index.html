@@ -311,9 +311,16 @@ function flushPendingPushQueue(){
 window.addEventListener('online', flushPendingPushQueue);
 
 function notifyTransaction(title, body){
-    sendPushNotification({ username: currentUser, title: title, body: body, url: '/' });
+    // Colour-code by action: green for save, red for delete. True background
+    // colour isn't controllable in system push notifications, so we use a
+    // coloured circle emoji in the push title as the closest reliable
+    // equivalent; the in-app bell list gets a real coloured border.
+    const isDelete = /deleted/i.test(title);
+    const ntype = isDelete ? 'delete' : 'save';
+    const emoji = isDelete ? '🔴' : '🟢';
+    sendPushNotification({ username: currentUser, title: emoji + ' ' + title, body: body, url: '/' });
     try{
-        fbdb.ref('user_notifications/' + currentUser).push({ title: title, body: body, time: new Date().toLocaleString(), ts: Date.now(), read: false });
+        fbdb.ref('user_notifications/' + currentUser).push({ title: title, body: body, time: new Date().toLocaleString(), ts: Date.now(), read: false, type: ntype });
     }catch(e){ console.log('In-app notif save failed:', e.message); }
 }
 
@@ -395,7 +402,8 @@ function renderNotifDropdown(){
         html += `<div class="notif-item" onclick="handleNotifClick('support')"><span class="notif-dot"></span><span class="notif-text"><b>Customer agent replied</b><span>Tap to open the support chat</span></span></div>`;
     }
     notifItems.forEach(n => {
-        html += `<div class="notif-item" onclick="markUserNotifRead('${n._key}')">${n.read ? '' : '<span class="notif-dot"></span>'}<span class="notif-text"><b>${n.title||''}</b><span>${n.body||''} &middot; ${n.time||''}</span></span></div>`;
+        const borderColor = n.type === 'delete' ? '#dc2626' : (n.type === 'save' ? '#16a34a' : 'transparent');
+        html += `<div class="notif-item" style="border-left:4px solid ${borderColor};" onclick="markUserNotifRead('${n._key}')">${n.read ? '' : '<span class="notif-dot"></span>'}<span class="notif-text"><b>${n.title||''}</b><span>${n.body||''} &middot; ${n.time||''}</span></span></div>`;
     });
     if(!html){
         html = '<div class="notif-empty">No new notifications</div>';
