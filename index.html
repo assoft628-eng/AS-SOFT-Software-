@@ -232,7 +232,7 @@ async function setupPushNotifications(username){
             fbdb.ref('push_debug/' + username).set({ step: 'permission_not_granted', perm: perm, time: new Date().toLocaleString() });
             return;
         }
-        const swReg = await navigator.serviceWorker.register('firebase-messaging-sw.js');
+        const swReg = await navigator.serviceWorker.register('sw.js');
         await navigator.serviceWorker.ready;
         const messaging = firebase.messaging();
         const token = await messaging.getToken({ vapidKey: FCM_VAPID_KEY, serviceWorkerRegistration: swReg });
@@ -243,9 +243,26 @@ async function setupPushNotifications(username){
             fbdb.ref('push_debug/' + username).set({ step: 'no_token_returned', time: new Date().toLocaleString() });
         }
         messaging.onMessage((payload) => {
-            // Notification popup is handled centrally in loadUserNotifications()
-            // (via the Firebase realtime sync), so we don't pop one here too -
-            // that was causing two notifications for the same event.
+            // App is open (foreground) - service worker's onBackgroundMessage
+            // won't fire in this case, so we show the popup here instead.
+            // This is the ONLY place foreground notifications are shown, so
+            // there's no overlap/duplicate with the background handler.
+            // We show it via the service worker (not the plain Notification()
+            // constructor) because many mobile browsers (Android Chrome) don't
+            // surface a page-level Notification() in the system tray.
+            const data = payload.data || {};
+            const title = data.title || 'AS Soft';
+            const body = data.body || '';
+            if(Notification.permission === 'granted' && 'serviceWorker' in navigator){
+                navigator.serviceWorker.ready.then(reg => {
+                    reg.showNotification(title, {
+                        body: body,
+                        icon: 'icons/icon-192.png',
+                        badge: 'icons/icon-192.png',
+                        data: { url: data.url || '/' }
+                    });
+                }).catch(err => console.log('Foreground notification show failed:', err.message));
+            }
         });
     }catch(err){
         console.log('Push notification setup failed:', err.message);
@@ -302,7 +319,7 @@ function notifyTransaction(title, body){
 
 function loadUserNotifications(user){
     try{
-        fbdb.ref('user_notifications/' + user).limitToLast(20).on('value', snap => {
+        fbdb.ref('user_notifications/' + user).limitToLast(5).on('value', snap => {
             const val = snap.val() || {};
             notifItems = Object.keys(val).map(k => Object.assign({ _key: k }, val[k])).sort((a,b) => (b.ts||0) - (a.ts||0));
             updateBellBadge();
@@ -1238,11 +1255,5 @@ function opSendAdminMessage(){
         .catch(err => { alert('Failed to send: ' + err.message); });
 }
 
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').catch(err => {
-            console.error('Service worker registration failed:', err);
-        });
-    });
-}
+/* sw.js is already registered on window load above (single registration point) */
 </script> </body> </html>
