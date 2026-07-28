@@ -302,27 +302,9 @@ function notifyTransaction(title, body){
 
 function loadUserNotifications(user){
     try{
-        const seenKey = 'as_notif_seen_' + user;
-        let seenKeys = new Set();
-        try{ seenKeys = new Set(JSON.parse(localStorage.getItem(seenKey) || '[]')); }catch(e){}
         fbdb.ref('user_notifications/' + user).limitToLast(20).on('value', snap => {
             const val = snap.val() || {};
-            const newList = Object.keys(val).map(k => Object.assign({ _key: k }, val[k])).sort((a,b) => (b.ts||0) - (a.ts||0));
-            // Anything not yet seen on this device - pop it as a real notification.
-            // This fires every time Firebase syncs, which happens automatically the
-            // moment internet comes back on, so nothing missed while offline is lost -
-            // whether the app was open in the foreground or reconnecting after a gap.
-            const unseen = newList.filter(item => !seenKeys.has(item._key)).sort((a,b) => (a.ts||0) - (b.ts||0));
-            unseen.forEach(item => {
-                seenKeys.add(item._key);
-                if('Notification' in window && Notification.permission === 'granted'){
-                    try{ new Notification(item.title || 'AS Soft', { body: item.body || '', icon: 'icons/icon-192.png' }); }catch(e){}
-                }
-            });
-            if(unseen.length){
-                try{ localStorage.setItem(seenKey, JSON.stringify(Array.from(seenKeys).slice(-100))); }catch(e){}
-            }
-            notifItems = newList;
+            notifItems = Object.keys(val).map(k => Object.assign({ _key: k }, val[k])).sort((a,b) => (b.ts||0) - (a.ts||0));
             updateBellBadge();
         });
     }catch(e){ console.log('Load notifications failed:', e.message); }
