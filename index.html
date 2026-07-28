@@ -243,12 +243,9 @@ async function setupPushNotifications(username){
             fbdb.ref('push_debug/' + username).set({ step: 'no_token_returned', time: new Date().toLocaleString() });
         }
         messaging.onMessage((payload) => {
-            // App is open in foreground - show a quick in-app notification too
-            const title = (payload.notification && payload.notification.title) || 'AS Soft';
-            const body = (payload.notification && payload.notification.body) || '';
-            if(Notification.permission === 'granted'){
-                new Notification(title, { body: body, icon: 'icons/icon-192.png' });
-            }
+            // Notification popup is handled centrally in loadUserNotifications()
+            // (via the Firebase realtime sync), so we don't pop one here too -
+            // that was causing two notifications for the same event.
         });
     }catch(err){
         console.log('Push notification setup failed:', err.message);
