@@ -925,11 +925,11 @@ function buildDailyReportPDFBlob(dateStr){
     const doc = new jsPDF();
     const entries = getAllDaybookEntries().filter(e=>e.date===dateStr);
     const sections = [
-        { title: 'Sales Voucher', match: e => e.category === 'Sale' },
-        { title: 'Purchase Voucher', match: e => e.category === 'Purchase' },
-        { title: 'Service Voucher', match: e => e.category === 'Service' },
-        { title: 'Payment / Receipt', match: e => e.category === 'Payment' || e.category === 'Receipt' },
-        { title: 'Partners Book', match: e => String(e.category).indexOf('Partner') === 0 }
+        { title: 'Sales Voucher', totalLabel: 'Total Sales Amount', match: e => e.category === 'Sale' },
+        { title: 'Purchase Voucher', totalLabel: 'Total Purchase Amount', match: e => e.category === 'Purchase' },
+        { title: 'Service Voucher', totalLabel: 'Total Service Amount', match: e => e.category === 'Service' },
+        { title: 'Payment / Receipt', totalLabel: 'Total Payment / Receipt Amount', match: e => e.category === 'Payment' || e.category === 'Receipt' },
+        { title: 'Partners Book', totalLabel: 'Total Partners Amount', match: e => String(e.category).indexOf('Partner') === 0 }
     ];
     doc.setFontSize(16);
     doc.text(currentCompany || 'AS Soft', 14, 18);
@@ -944,12 +944,17 @@ function buildDailyReportPDFBlob(dateStr){
         const items = entries.filter(sec.match);
         if(!items.length) return;
         anySection = true;
-        ensureSpace(18);
+        ensureSpace(20);
+        // Red heading bar for this voucher/section
+        doc.setFillColor(220, 38, 38);
+        doc.rect(14, y - 6, 182, 9, 'F');
+        doc.setTextColor(255, 255, 255);
         doc.setFontSize(12);
         doc.setFont(undefined, 'bold');
-        doc.text(sec.title, 14, y);
+        doc.text(sec.title, 17, y);
+        doc.setTextColor(0, 0, 0);
         doc.setFont(undefined, 'normal');
-        y += 7;
+        y += 9;
         doc.setFontSize(9.5);
         doc.text('Details', 14, y); doc.text('Amount', 175, y);
         y += 3;
@@ -966,10 +971,10 @@ function buildDailyReportPDFBlob(dateStr){
         });
         ensureSpace(10);
         doc.setFont(undefined, 'bold');
-        doc.text('Subtotal - ' + sec.title, 14, y);
+        doc.text(sec.totalLabel, 14, y);
         doc.text('Rs.' + sectionTotal, 175, y);
         doc.setFont(undefined, 'normal');
-        y += 10;
+        y += 12;
         grandTotal += sectionTotal;
     });
     if(!anySection){
