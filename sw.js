@@ -1,4 +1,4 @@
-const CACHE_NAME = "as-soft-cache-v1";
+const CACHE_NAME = "as-soft-cache-v2";
 const ASSETS_TO_CACHE = [
   "./",
   "./index.html",
@@ -31,7 +31,14 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   if (event.request.mode === "navigate") {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match("./index.html"))
+      fetch(event.request).then((response) => {
+        const responseClone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, responseClone);
+          cache.put("./index.html", response.clone());
+        });
+        return response;
+      }).catch(() => caches.match(event.request).then((cached) => cached || caches.match("./index.html")))
     );
     return;
   }
