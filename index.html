@@ -1134,18 +1134,18 @@ function saveGreenApiConfig(){
     }).catch(err=>alert('Error: '+err.message));
 }
 /* ===== Per-report WhatsApp payment gate (UPI) ===== */
-const REPORT_PAY_UPI_ID = '9656504127@ybl';
+const REPORT_PAY_UPI_ID = '9656504127.wallet@phonepe';
 const REPORT_PAY_NAME = 'AFSAL';
 const REPORT_PAY_AMOUNT = 2;
 function buildUpiDeepLink(){
-    const params = new URLSearchParams({
-        pa: REPORT_PAY_UPI_ID,
-        pn: REPORT_PAY_NAME,
-        am: String(REPORT_PAY_AMOUNT),
-        cu: 'INR',
-        tn: 'AS Soft Daily Report'
-    });
-    return 'upi://pay?' + params.toString();
+    const params = [
+        'pa=' + encodeURIComponent(REPORT_PAY_UPI_ID),
+        'pn=' + encodeURIComponent(REPORT_PAY_NAME),
+        'am=' + encodeURIComponent(String(REPORT_PAY_AMOUNT)),
+        'cu=' + encodeURIComponent('INR'),
+        'tn=' + encodeURIComponent('AS Soft Daily Report')
+    ].join('&');
+    return 'upi://pay?' + params;
 }
 function openReportPaymentGate(){
     const link = buildUpiDeepLink();
