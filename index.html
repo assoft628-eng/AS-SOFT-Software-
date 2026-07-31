@@ -1604,7 +1604,7 @@ function playClickSound(){
     }catch(e){}
 }
 document.addEventListener('click', function(e){
-    const el = e.target.closest('.menu-card, .btn, .tab-btn, .op-new-chat-btn, .action-btns button, .chat-send-btn');
+    const el = e.target.closest('.menu-card, .btn, .tab-btn, .op-new-chat-btn, .action-btns button, .chat-send-btn, .back-btn');
     if(el){ playClickSound(); }
 }, true);
 
