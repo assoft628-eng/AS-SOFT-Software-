@@ -1216,12 +1216,8 @@ function cropTopRegion(dataUrl, fraction){
 function extractAmountFromText(text){
     if(!text) return null;
     const t = text.replace(/,/g,'');
-    const m1 = t.match(/(?:₹|Rs\.?|INR)\s*([0-9]+(?:\.[0-9]{1,2})?)/i);
+    const m1 = t.match(/₹\s*([0-9]+(?:\.[0-9]{1,2})?)/);
     if(m1) return parseFloat(m1[1]);
-    const m2 = t.match(/([0-9]+\.[0-9]{2})/);
-    if(m2) return parseFloat(m2[1]);
-    const m3 = t.match(/\b([0-9]{2,6})\b/);
-    if(m3) return parseFloat(m3[1]);
     return null;
 }
 function attachGpayToMatchingSale(date, amount){
