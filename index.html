@@ -1198,15 +1198,18 @@ function compressImageFile(file, maxWidth, quality){
         reader.readAsDataURL(file);
     });
 }
-function cropTopRegion(dataUrl, fraction){
+function cropRegion(dataUrl, startFraction, endFraction){
     return new Promise((resolve, reject)=>{
         const img = new Image();
         img.onload = ()=>{
             const w = img.width;
-            const h = Math.max(1, Math.round(img.height * fraction));
+            const totalH = img.height;
+            const startY = Math.max(0, Math.round(totalH * startFraction));
+            const endY = Math.min(totalH, Math.round(totalH * endFraction));
+            const h = Math.max(1, endY - startY);
             const canvas = document.createElement('canvas');
             canvas.width = w; canvas.height = h;
-            canvas.getContext('2d').drawImage(img, 0, 0, w, h, 0, 0, w, h);
+            canvas.getContext('2d').drawImage(img, 0, startY, w, h, 0, 0, w, h);
             resolve(canvas.toDataURL('image/jpeg', 0.9));
         };
         img.onerror = ()=>reject(new Error('Image load failed for crop'));
@@ -1216,7 +1219,7 @@ function cropTopRegion(dataUrl, fraction){
 function extractAmountFromText(text){
     if(!text) return null;
     const t = text.replace(/,/g,'');
-    const m1 = t.match(/₹\s*([0-9]+(?:\.[0-9]{1,2})?)/);
+    const m1 = t.match(/₹[ \t]*([0-9]+(?:\.[0-9]{1,2})?)/);
     if(m1) return parseFloat(m1[1]);
     return null;
 }
@@ -1260,7 +1263,7 @@ async function processGpayImage(file){
         const prev = document.getElementById('gpay_preview');
         prev.src = dataUrl; prev.style.display = 'block';
         setGpayStatus('🔎 Amount vaayikkunnu (OCR)...');
-        const ocrImage = await cropTopRegion(dataUrl, 0.45);
+        const ocrImage = await cropRegion(dataUrl, 0.10, 0.45);
         const result = await Tesseract.recognize(ocrImage, 'eng', {
             logger: m=>{ if(m.status==='recognizing text'){ setGpayStatus(`🔎 Amount vaayikkunnu... ${Math.round((m.progress||0)*100)}%`); } }
         });
