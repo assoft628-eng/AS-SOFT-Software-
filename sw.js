@@ -29,6 +29,11 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  if (event.request.method === "POST") {
+    event.respondWith(handleShareTarget(event));
+    return;
+  }
+
   if (event.request.mode === "navigate") {
     event.respondWith(
       fetch(event.request).then((response) => {
@@ -58,6 +63,16 @@ self.addEventListener("fetch", (event) => {
     })
   );
 });
+
+async function handleShareTarget(event) {
+  const formData = await event.request.formData();
+  const file = formData.get("screenshot");
+  if (file) {
+    const cache = await caches.open("share-target-cache");
+    await cache.put("shared-screenshot", new Response(file));
+  }
+  return Response.redirect("./?share-target=1", 303);
+}
 
 /* ---------- FIREBASE PUSH NOTIFICATIONS ----------
    This used to live in a separate firebase-messaging-sw.js file, but having
