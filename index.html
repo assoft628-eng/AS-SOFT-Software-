@@ -1964,6 +1964,101 @@ const VC_COMMANDS = [
     { k:['go home','main menu','home'], fn:()=>{ let tries=0; const backBtn=document.getElementById('backBtn'); while(backBtn && backBtn.style.display!=='none' && tries<8){ handleBack(); tries++; } }, say:'Home' }
 ];
 
+/* ---------- VOICE: SALE / PURCHASE FLOW (stock name + quantity + create, combined or step-by-step) ---------- */
+function vcCurrentVoucherSection(){
+    const saleSec = document.getElementById('section-sale');
+    if(saleSec && saleSec.style.display === 'block') return 'sale';
+    const purSec = document.getElementById('section-purchase');
+    if(purSec && purSec.style.display === 'block') return 'purchase';
+    return null;
+}
+function vcFindStockInText(text){
+    if(typeof db === 'undefined' || !db.stocks || !db.stocks.length) return null;
+    let best = null;
+    db.stocks.forEach(s=>{
+        const name = (s.name||'').toLowerCase().trim();
+        if(name.length >= 3 && text.includes(name)){
+            if(!best || name.length > best.name.length) best = s;
+        }
+    });
+    return best;
+}
+function vcExtractQty(text){
+    let m = text.match(/\b(?:quantity|qty)\s*(\d+)/) || text.match(/(\d+)\s*(?:quantity|qty)/);
+    if(m) return parseInt(m[1],10);
+    const stripped = text.replace(/\bprice\s*\d+/g,'').replace(/\b(?:purchase\s*)?value\s*\d+/g,'');
+    m = stripped.match(/\b(\d+)\b/);
+    if(m) return parseInt(m[1],10);
+    return null;
+}
+function vcExtractPrice(text){ const m = text.match(/\bprice\s*(\d+)/); return m ? parseFloat(m[1]) : null; }
+function vcExtractPurValue(text){ const m = text.match(/\b(?:purchase\s*value|value)\s*(\d+)/); return m ? parseFloat(m[1]) : null; }
+
+function vcHandleVoucherFlow(text, raw){
+    let target = null;
+    if(/\bpurchase\b/.test(text)) target = 'purchase';
+    else if(/\bsales?\b/.test(text)) target = 'sale';
+    else target = vcCurrentVoucherSection();
+    if(!target) return false;
+
+    const stock = vcFindStockInText(text);
+    const textForNumbers = stock ? text.split(stock.name.toLowerCase()).join(' ') : text;
+    const qty = vcExtractQty(textForNumbers);
+    const priceVal = target === 'sale' ? vcExtractPrice(textForNumbers) : vcExtractPurValue(textForNumbers);
+    const wantsCreate = /\b(create|complete|confirm|finish|finalize|submit)\b/.test(text);
+    const wantsAdd = /\badd\b/.test(text) && !wantsCreate;
+
+    const needsOpen = vcCurrentVoucherSection() !== target;
+
+    // Plain "sale" / "purchase" with nothing else -> just open the form (like before)
+    if(!stock && qty===null && priceVal===null && !wantsCreate && !wantsAdd){
+        if(needsOpen){ openSection(target); setTimeout(()=>loadStockDropdowns(), 100); }
+        vcShowToast('🎤 "' + raw + '" → ' + (target==='sale' ? 'Sale Voucher' : 'Purchase Voucher'));
+        if(typeof playClickSound === 'function'){ try{ playClickSound(); }catch(e){} }
+        return true;
+    }
+
+    if(needsOpen){ openSection(target); loadStockDropdowns(); }
+
+    const applyAndAct = ()=>{
+        if(stock){
+            if(target === 'sale'){
+                const sel = document.getElementById('sale_item_select');
+                if(sel){ sel.value = stock.id; const dt = document.getElementById('sale_item_display_text'); if(dt){ dt.innerText = stock.name; dt.style.color = '#0f172a'; } handleSaleItemChange(); }
+            } else {
+                const sel = document.getElementById('pur_item_select');
+                if(sel){ sel.value = stock.id; const dt = document.getElementById('pur_item_display_text'); if(dt){ dt.innerText = stock.name; dt.style.color = '#0f172a'; } handlePurchaseItemChange(); }
+            }
+        }
+        if(qty !== null){
+            const qtyEl = document.getElementById(target==='sale' ? 'sale_qty' : 'pur_qty');
+            if(qtyEl) qtyEl.value = qty;
+        }
+        if(priceVal !== null){
+            const pEl = document.getElementById(target==='sale' ? 'sale_price' : 'pur_val');
+            if(pEl) pEl.value = priceVal;
+        }
+
+        const parts = [];
+        if(stock) parts.push(stock.name);
+        if(qty !== null) parts.push('Qty ' + qty);
+
+        if(wantsAdd){
+            if(target === 'sale') addSaleItem(); else addPurchaseItem();
+            vcShowToast('🎤 "' + raw + '" → ' + (target==='sale' ? 'Item Added to Sale Bill' : 'Item Added to Purchase Bill'));
+        } else if(wantsCreate){
+            if(target === 'sale') saveSale(); else savePurchase();
+            vcShowToast('🎤 "' + raw + '" → ' + (target==='sale' ? 'Sale Completed' : 'Purchase Completed'));
+        } else {
+            vcShowToast('🎤 "' + raw + '" → ' + (parts.length ? parts.join(', ') : (target==='sale' ? 'Sale Voucher' : 'Purchase Voucher')));
+        }
+        if(typeof playClickSound === 'function'){ try{ playClickSound(); }catch(e){} }
+    };
+
+    if(needsOpen) setTimeout(applyAndAct, 200); else applyAndAct();
+    return true;
+}
+
 function vcEnterActive(){
     vcMode = 'active';
     updateVoiceMicUI();
@@ -1973,6 +2068,7 @@ function vcEnterActive(){
 }
 
 function vcExecuteCommand(text, raw){
+    if(vcHandleVoucherFlow(text, raw)) return;
     for(const cmd of VC_COMMANDS){
         for(const kw of cmd.k){
             if(text.includes(kw)){
