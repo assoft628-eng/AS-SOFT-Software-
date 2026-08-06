@@ -531,9 +531,16 @@ function applyAppUpdate(data){
         if(__updateApplied) return; // never run twice (cleanup finishing late after timeout fallback already fired)
         __updateApplied = true;
         try{ localStorage.setItem('as_app_html_version', String(data.version)); localStorage.setItem('as_app_html_code', data.code); }catch(e){}
-        document.open();
-        document.write(data.code);
-        document.close();
+        // Use a real reload instead of document.write() to swap the page.
+        // document.write() only replaces the DOM, not the JS global scope/window —
+        // if this code path runs after the top-of-<head> offline-restore script
+        // already wrote+ran the page once in this same load (e.g. a stale cached
+        // version existed locally while a newer one was live on Firebase), the same
+        // inline <script> (with its top-level let/const declarations) would execute
+        // a second time in the SAME window, causing "Identifier '...' has already
+        // been declared" SyntaxErrors and a blank/broken app. A full reload gives
+        // each apply a fresh JS realm, so this can never double-execute.
+        location.reload();
     };
     try{
         const apps = (typeof firebase !== 'undefined' && firebase.apps) ? firebase.apps.slice() : [];
