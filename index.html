@@ -1994,12 +1994,56 @@ function vcExtractQty(text){
 function vcExtractPrice(text){ const m = text.match(/\bprice\s*(\d+)/); return m ? parseFloat(m[1]) : null; }
 function vcExtractPurValue(text){ const m = text.match(/\b(?:purchase\s*value|value)\s*(\d+)/); return m ? parseFloat(m[1]) : null; }
 
-function vcHandleVoucherFlow(text, raw){
+function vcGoHomeLoop(){
+    let tries = 0;
+    const backBtn = document.getElementById('backBtn');
+    while(backBtn && backBtn.style.display !== 'none' && tries < 8){
+        handleBack();
+        tries++;
+    }
+}
+
+// Works out which voucher form ("sale" / "purchase") a command should act on, and
+// whether the person explicitly asked to go home first.
+// Rule: if we're already sitting inside a Sale or Purchase form, a stray mention of
+// the OTHER word ("sale" while in Purchase, or vice versa) is ignored - it will NOT
+// switch sections on its own (prevents accidental context-switching mid-flow).
+// To deliberately switch, the person must say "back home" together with the target,
+// e.g. "back home sale" / "back to home and open purchase".
+function vcDetectVoucherTarget(text){
+    const mentionsPurchase = /\bpurchase\b/.test(text);
+    const mentionsSale = /\bsales?\b/.test(text);
+    const mentionsHome = /\bback\s*(to\s*)?home\b|\bgo\s*home\b|\bhome\b/.test(text);
+    const current = vcCurrentVoucherSection();
     let target = null;
-    if(/\bpurchase\b/.test(text)) target = 'purchase';
-    else if(/\bsales?\b/.test(text)) target = 'sale';
-    else target = vcCurrentVoucherSection();
-    if(!target) return false;
+    let wentHome = false;
+
+    if(mentionsHome){
+        vcGoHomeLoop();
+        wentHome = true;
+        if(mentionsPurchase) target = 'purchase';
+        else if(mentionsSale) target = 'sale';
+    } else if(current){
+        target = current; // stay put - ignore any mention of the other voucher word
+    } else {
+        if(mentionsPurchase) target = 'purchase';
+        else if(mentionsSale) target = 'sale';
+    }
+    return { target, wentHome };
+}
+
+function vcHandleVoucherFlow(text, raw){
+    const det = vcDetectVoucherTarget(text);
+    const target = det.target;
+    const wentHome = det.wentHome;
+    if(!target){
+        if(wentHome){
+            vcShowToast('🎤 "' + raw + '" → Home');
+            if(typeof playClickSound === 'function'){ try{ playClickSound(); }catch(e){} }
+            return true;
+        }
+        return false;
+    }
 
     const stock = vcFindStockInText(text);
     const textForNumbers = stock ? text.split(stock.name.toLowerCase()).join(' ') : text;
@@ -2008,7 +2052,7 @@ function vcHandleVoucherFlow(text, raw){
     const wantsCreate = /\b(create|complete|confirm|finish|finalize|submit)\b/.test(text);
     const wantsAdd = /\badd\b/.test(text) && !wantsCreate;
 
-    const needsOpen = vcCurrentVoucherSection() !== target;
+    const needsOpen = wentHome || (vcCurrentVoucherSection() !== target);
 
     // Plain "sale" / "purchase" with nothing else -> just open the form (like before)
     if(!stock && qty===null && priceVal===null && !wantsCreate && !wantsAdd){
@@ -2059,27 +2103,39 @@ function vcHandleVoucherFlow(text, raw){
     return true;
 }
 
+const VC_ACTIVE_IDLE_MS = 15000; // 15 seconds without a RECOGNIZED command in active mode -> auto close (go back to passive)
+
+function vcArmActiveIdleTimer(){
+    clearTimeout(vcActiveTimer);
+    vcActiveTimer = setTimeout(()=>{
+        vcMode = 'passive';
+        updateVoiceMicUI();
+        vcShowToast('🎤 15 second-il valid command onnum kittiyilla — voice command auto-off aayi. "Hey Soft" ennu paranjitt veendum thudangam');
+    }, VC_ACTIVE_IDLE_MS);
+}
+
 function vcEnterActive(){
     vcMode = 'active';
     updateVoiceMicUI();
-    vcShowToast('🎤 "Hey Soft" kettu! Ippol command parayu...');
-    clearTimeout(vcActiveTimer);
-    vcActiveTimer = setTimeout(()=>{ vcMode = 'passive'; updateVoiceMicUI(); }, 7000);
+    vcShowToast('🎤 "Hey Soft" kettu! Ippol command parayu... (15 sec-il valid command illenkil auto-off aavum, "OK" ennum close cheyyam)');
+    vcArmActiveIdleTimer();
 }
 
+// Returns true if a recognized command was actually matched and run.
 function vcExecuteCommand(text, raw){
-    if(vcHandleVoucherFlow(text, raw)) return;
+    if(vcHandleVoucherFlow(text, raw)) return true;
     for(const cmd of VC_COMMANDS){
         for(const kw of cmd.k){
             if(text.includes(kw)){
                 vcShowToast('🎤 "' + raw + '" → ' + cmd.say);
                 if(typeof playClickSound === 'function'){ try{ playClickSound(); }catch(e){} }
                 cmd.fn();
-                return;
+                return true;
             }
         }
     }
     vcShowToast('🎤 "' + raw + '" — command manasilayilla');
+    return false;
 }
 
 function vcProcessTranscript(raw){
@@ -2091,7 +2147,12 @@ function vcProcessTranscript(raw){
         if(VC_WAKE_REGEX.test(text)){
             const rest = text.replace(VC_WAKE_REGEX,'').trim();
             if(rest){
-                vcExecuteCommand(rest, raw);   // "Hey Soft, sale voucher" in one breath
+                // "Hey Soft, sale voucher" in one breath - also opens up active mode so
+                // every command after this no longer needs "Hey Soft" repeated
+                vcMode = 'active';
+                updateVoiceMicUI();
+                vcArmActiveIdleTimer();
+                vcExecuteCommand(rest, raw);
             } else {
                 vcEnterActive();               // just "Hey Soft" - wait for the next line as the command
             }
@@ -2099,11 +2160,20 @@ function vcProcessTranscript(raw){
         return;
     }
 
-    // vcMode === 'active': this whole utterance is treated as the command
-    clearTimeout(vcActiveTimer);
-    vcMode = 'passive';
-    updateVoiceMicUI();
-    vcExecuteCommand(text.replace(VC_WAKE_REGEX,'').trim() || text, raw);
+    // vcMode === 'active': every utterance from here on is treated directly as a command,
+    // no wake word needed. The 15-second idle clock is reset ONLY when a command is
+    // actually recognized and run - unrecognized/mistaken speech, or silence, does NOT
+    // reset it, so it auto-closes back to passive 15 seconds after the last valid command.
+    // Saying "OK" closes it immediately too.
+    if(/\b(ok|okay)\b/.test(text)){
+        clearTimeout(vcActiveTimer);
+        vcMode = 'passive';
+        updateVoiceMicUI();
+        vcShowToast('🎤 Voice command closed — ippol "Hey Soft" ennu paranjitt mathrame command edukkoo');
+        return;
+    }
+    const recognized = vcExecuteCommand(text.replace(VC_WAKE_REGEX,'').trim() || text, raw);
+    if(recognized) vcArmActiveIdleTimer();
 }
 
 function initVoiceRecognition(){
@@ -2149,7 +2219,7 @@ function updateVoiceMicUI(){
     btn.classList.remove('vc-active','vc-listening');
     if(vcMode === 'active'){
         btn.classList.add('vc-active');
-        btn.title = 'Kettu! Command parayu (nirthaan tap cheyyuka)';
+        btn.title = 'Kettu! Command parayu (15 sec-il valid command illenkil auto-off, "OK" ennum close cheyyam)';
     } else if(vcMode === 'passive'){
         btn.classList.add('vc-listening');
         btn.title = '"Hey Soft" ennu paranju command kodukkam (nirthaan tap cheyyuka)';
