@@ -395,7 +395,7 @@ function markUserNotifRead(key){
 
 
 
-let dbCache = { stocks:[], sales:[], services:[], purchases:[], partners:[], payrec:[], daybook:[] }; let saleCart = []; let purCart = []; let currentSaleBillNo = null; let currentPurBillNo = null; let deferredInstallPrompt = null; window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstallPrompt = e; const btn = document.getElementById('install-app-btn'); if(btn) btn.style.display = 'inline-flex'; }); function installApp(){ if(!deferredInstallPrompt){ alert('App already installed alle, browser menu-il ninnum "Add to Home screen" / "Install" option nokkuka.'); return; } deferredInstallPrompt.prompt(); deferredInstallPrompt.userChoice.finally(() => { deferredInstallPrompt = null; const btn = document.getElementById('install-app-btn'); if(btn) btn.style.display = 'none'; }); } window.addEventListener('appinstalled', () => { const btn = document.getElementById('install-app-btn'); if(btn) btn.style.display = 'none'; }); if('serviceWorker' in navigator){ window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed:', err)); }); } window.addEventListener('load', () => { startLiveClock(); setTimeout(() => { if(appIsUpdating) return; checkLoginSession(); }, 900); setTimeout(() => { if(appIsUpdating) return; const ls = document.getElementById('loading-screen'); if(ls && ls.style.display !== 'none'){ checkLoginSession(); } }, 15000); }); let pendingAppUpdate = null; let appIsUpdating = false;
+let dbCache = { stocks:[], sales:[], services:[], purchases:[], partners:[], payrec:[], daybook:[] }; let saleCart = []; let purCart = []; let currentSaleBillNo = null; let currentPurBillNo = null; let deferredInstallPrompt = null; window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstallPrompt = e; const btn = document.getElementById('install-app-btn'); if(btn) btn.style.display = 'inline-flex'; }); function installApp(){ if(!deferredInstallPrompt){ alert('App already installed alle, browser menu-il ninnum "Add to Home screen" / "Install" option nokkuka.'); return; } deferredInstallPrompt.prompt(); deferredInstallPrompt.userChoice.finally(() => { deferredInstallPrompt = null; const btn = document.getElementById('install-app-btn'); if(btn) btn.style.display = 'none'; }); } window.addEventListener('appinstalled', () => { const btn = document.getElementById('install-app-btn'); if(btn) btn.style.display = 'none'; }); if('serviceWorker' in navigator){ window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').then(reg => { if(reg) reg.update().catch(()=>{}); }).catch(err => console.log('SW registration failed:', err)); }); navigator.serviceWorker.addEventListener('controllerchange', () => { if(appIsUpdating) return; location.reload(); }); } window.addEventListener('load', () => { startLiveClock(); setTimeout(() => { if(appIsUpdating) return; checkLoginSession(); }, 900); setTimeout(() => { if(appIsUpdating) return; const ls = document.getElementById('loading-screen'); if(ls && ls.style.display !== 'none'){ checkLoginSession(); } }, 15000); }); let pendingAppUpdate = null; let appIsUpdating = false;
 function dismissLoadingScreen(){ const ls = document.getElementById('loading-screen'); if(!ls || ls.style.display === 'none') return; ls.style.opacity = '0'; setTimeout(() => { ls.style.display = 'none'; }, 500); playAppOpenChime(); }
 let __chimeAudioCtx = null;
 function playAppOpenChime(){
@@ -454,15 +454,20 @@ function checkForAppUpdate(manual){
         const localVersion = parseInt(localStorage.getItem('as_app_html_version') || '0', 10);
         if(btn){ btn.innerText='🔄 Check for App Update'; btn.disabled=false; }
         if(data && data.version && data.version > localVersion && data.code){
+            // No auto-apply, ever — just surface the "New Version - Click to Download"
+            // button + bell notification. Update only happens when the customer
+            // taps that download button (or confirms via the manual check below).
             if(manual){
                 if(confirm('Puthiya update (v' + data.version + ') kittiyittundu. Ippol thanne update cheyyatte? (Save cheyyaathe form-il type cheythathenkil, athu nashtamaakum. Already save cheytha data safe aayirikkum.)')){
                     applyAppUpdate(data);
-                } else {
-                    refreshUpdateSectionUI(data, localVersion);
+                    return;
                 }
-            } else {
-                applyAppUpdate(data); // silent auto-update on fresh app launch, before login
             }
+            notifHasUpdate = true;
+            updateBellBadge();
+            const dlBtn = document.getElementById('download-update-btn');
+            if(dlBtn) dlBtn.style.display = 'inline-flex';
+            refreshUpdateSectionUI(data, localVersion);
             return;
         }
         if(manual){ alert(data && data.version ? 'Ningal already latest version-il aanu ullath.' : 'Update onnum push cheythittilla.'); }
@@ -549,16 +554,36 @@ function applyAppUpdate(data){
         if(__updateApplied) return; // never run twice (cleanup finishing late after timeout fallback already fired)
         __updateApplied = true;
         try{ localStorage.setItem('as_app_html_version', String(data.version)); localStorage.setItem('as_app_html_code', data.code); }catch(e){}
-        // Use a real reload instead of document.write() to swap the page.
-        // document.write() only replaces the DOM, not the JS global scope/window —
-        // if this code path runs after the top-of-<head> offline-restore script
-        // already wrote+ran the page once in this same load (e.g. a stale cached
-        // version existed locally while a newer one was live on Firebase), the same
-        // inline <script> (with its top-level let/const declarations) would execute
-        // a second time in the SAME window, causing "Identifier '...' has already
-        // been declared" SyntaxErrors and a blank/broken app. A full reload gives
-        // each apply a fresh JS realm, so this can never double-execute.
-        location.reload();
+        // Actually serve the pushed code: overwrite the service worker's cached
+        // copy of index.html with the pushed data.code, and tell the SW (via
+        // postMessage) that this version has been explicitly accepted, so it
+        // keeps serving THIS cached copy on future navigations instead of
+        // re-fetching the (possibly unchanged) real hosted file. Without this,
+        // "Push Update" from the Operator Panel only bumped a version number —
+        // reload() would just re-fetch whatever's actually deployed on hosting,
+        // which the operator may not have touched, so nothing visibly changed.
+        const finishReload = () => {
+            // Use a real reload (not document.write) to swap the page — a full
+            // reload gives a fresh JS realm, avoiding "Identifier already
+            // declared" crashes from the same inline <script> running twice.
+            location.reload();
+        };
+        (async () => {
+            try{
+                if('caches' in window && data.code){
+                    const cache = await caches.open('as-soft-cache-v2');
+                    const resp = new Response(data.code, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+                    await cache.put('./', resp.clone());
+                    await cache.put('./index.html', resp.clone());
+                }
+                if(navigator.serviceWorker && navigator.serviceWorker.controller){
+                    navigator.serviceWorker.controller.postMessage({ type: 'ACCEPT_PUSH_VERSION', version: data.version });
+                }
+            }catch(e){
+                console.log('Applying pushed code to cache failed:', e && e.message);
+            }
+            finishReload();
+        })();
     };
     try{
         const apps = (typeof firebase !== 'undefined' && firebase.apps) ? firebase.apps.slice() : [];
@@ -742,6 +767,35 @@ async function checkAutoDailyReport(){
 window.addEventListener('online', () => { checkAutoDailyReport(); });
 document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') checkAutoDailyReport(); });
 setInterval(checkAutoDailyReport, 60000);
+
+/* ---------- APP RESUME → VERSION CONSISTENCY CHECK ----------
+   When the app is sent to background (switch to another app) and brought back,
+   the page usually just RESUMES from memory (no fresh network load happens),
+   so it can keep showing an older version than a brand-new open would show.
+   Fix: on resume, (1) ask the service worker to check for a newer sw.js/cache
+   (network-first navigate requests already keep index.html itself fresh), and
+   (2) silently re-check the Firebase app_config/html version and auto-apply
+   if a newer one is available — same as what happens on a fresh app launch. */
+let __lastResumeCheck = 0;
+async function vcCheckVersionOnResume(){
+    if(appIsUpdating) return;
+    const now = Date.now();
+    if(now - __lastResumeCheck < 15000) return; // throttle - avoid spamming on rapid tab switches
+    __lastResumeCheck = now;
+    try{
+        if('serviceWorker' in navigator){
+            const reg = await navigator.serviceWorker.getRegistration();
+            if(reg) reg.update().catch(()=>{});
+        }
+    }catch(e){}
+    if(navigator.onLine && typeof checkForAppUpdate === 'function'){
+        checkForAppUpdate(false); // silent — auto-applies + reloads only if a newer version is actually available
+    }
+}
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') vcCheckVersionOnResume(); });
+window.addEventListener('focus', vcCheckVersionOnResume);
+window.addEventListener('pageshow', (e) => { if(e.persisted) vcCheckVersionOnResume(); }); // back-forward cache restores
+
 function markPendingSync(pending){
     try{ localStorage.setItem('as_pending_sync_'+currentUser, pending ? '1' : '0'); }catch(e){}
     updateSyncBadge();
