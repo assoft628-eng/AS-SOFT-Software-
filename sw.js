@@ -28,6 +28,17 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+self.addEventListener("message", (event) => {
+  const msg = event.data || {};
+  if (msg.type === "ACCEPT_PUSH_VERSION") {
+    event.waitUntil(
+      caches.open(CACHE_NAME).then((cache) =>
+        cache.put("__pushed_meta__", new Response(JSON.stringify({ version: msg.version })))
+      )
+    );
+  }
+});
+
 self.addEventListener("fetch", (event) => {
   if (event.request.method === "POST") {
     event.respondWith(handleShareTarget(event));
@@ -35,18 +46,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (event.request.mode === "navigate") {
-    event.respondWith(
-      fetch(event.request).then((response) => {
-        if (response.ok) {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseClone);
-            cache.put("./index.html", response.clone());
-          });
-        }
-        return response;
-      }).catch(() => caches.match(event.request).then((cached) => cached || caches.match("./index.html")))
-    );
+    event.respondWith(handleNavigate(event.request));
     return;
   }
 
@@ -67,6 +67,34 @@ self.addEventListener("fetch", (event) => {
     })
   );
 });
+
+async function handleNavigate(request){
+  const cache = await caches.open(CACHE_NAME);
+  // If the operator has pushed an update via the Operator Panel AND the
+  // customer has explicitly tapped "Download" for it (applyAppUpdate() in
+  // index.html sends ACCEPT_PUSH_VERSION), keep serving that accepted cached
+  // copy on every future navigation — don't let a normal network fetch of the
+  // separately-hosted index.html (which the operator may not have redeployed)
+  // silently overwrite it. This is what makes "Push Update" actually stick.
+  const meta = await cache.match("__pushed_meta__");
+  if (meta) {
+    const cachedIndex = await cache.match("./index.html");
+    if (cachedIndex) return cachedIndex;
+  }
+  // Normal flow: network-first, cache as fallback for offline.
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const responseClone = response.clone();
+      cache.put(request, responseClone);
+      cache.put("./index.html", response.clone());
+    }
+    return response;
+  } catch (e) {
+    const cached = await cache.match(request);
+    return cached || cache.match("./index.html");
+  }
+}
 
 async function handleShareTarget(event) {
   const formData = await event.request.formData();
